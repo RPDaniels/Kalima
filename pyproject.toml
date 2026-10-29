@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "k4lib"
+version = "0.5.1"
+description = "Read, write and manage Kawai K4/K4r banks over MIDI SysEx (English, Spanish, French)"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+midi = ["mido>=1.3", "python-rtmidi>=1.5"]
+dev = ["pytest"]
+
+[project.scripts]
+k4 = "k4lib.cli:main"
+kalima = "k4app.app:main"
+
+[tool.setuptools]
+packages = ["k4lib", "k4app"]
+
+[tool.setuptools.package-data]
+k4app = ["data/*.SYX", "data/*.ico", "data/*.png"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
