@@ -1,6 +1,6 @@
 # Kalima / k4lib
 
-![[Kalima.png]]
+![Kalima](https://github.com/RPDaniels/Kalima/blob/main/Kalima.png?raw=true)
 
 **Kalima** is a bank manager for the **Kawai K4 / K4r** synthesizer (1989) written in Python. It is
 made of a library (`k4lib`) that reads, writes and manages MIDI System Exclusive dumps,
