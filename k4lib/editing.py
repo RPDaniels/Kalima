@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 from . import constants as C
 from .i18n import N_, _
-from .patches import Drum, Effect, Multi, Single
+from .patches import ARROW_LEFT, Drum, Effect, Multi, Single
 from .sysex import index_name
 
 # Copias de cada ámbito dentro de su patch
@@ -302,7 +302,7 @@ def set_value(patch, param: Param, value: int, index: int = 0) -> None:
 def set_name(patch: Single | Multi, name: str) -> str:
     """Pone el nombre (10 caracteres ASCII imprimibles; el resto se sustituye por
     espacios) y lo devuelve tal como queda."""
-    clean = "".join(c if 32 <= ord(c) < 127 else " " for c in name)[:C.NAME_LENGTH]
+    clean = "".join(c if 32 <= ord(c) < 127 or c == ARROW_LEFT else " " for c in name)[:C.NAME_LENGTH]
     patch.name = clean.ljust(C.NAME_LENGTH)
     return patch.name
 

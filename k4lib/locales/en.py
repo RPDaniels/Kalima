@@ -418,4 +418,13 @@ MESSAGES = {
     'Ningún Single ni Multi del banco usa el efecto {n}: asígnaselo a uno para oírlo': 'No Single or Multi in the bank uses effect {n}: assign it to one to hear it',
     'Suena el {what} {pos} «{name}», que usa el efecto {n}': 'Playing {what} {pos} “{name}”, which uses effect {n}',
     'con el efecto guardado en el K4; para oír tus cambios, escríbelo en el K4': 'with the effect stored in the K4; to hear your changes, write it to the K4',
+    'El archivo {name} tenía problemas:': 'The file {name} had problems:',
+    'Kalima lo ha corregido al abrirlo; el archivo original no se ha tocado. Usa «Guardar como» para tener una copia corregida.': 'Kalima fixed it when opening it; the original file has not been touched. Use “Save as” to keep a corrected copy.',
+    'al volcado le falta {n} byte': ('the dump is missing {n} byte', 'the dump is missing {n} bytes'),
+    'efecto {n}': 'effect {n}',
+    'el archivo solo contiene peticiones de volcado al K4, no datos de sonidos': 'the file only contains dump requests to the K4, not sound data',
+    'el volcado tiene {n} byte de más': ('the dump has {n} extra byte', 'the dump has {n} extra bytes'),
+    'reparado: el archivo tenía {n} byte 0D de más, típico de una transferencia en modo texto': ('repaired: the file had {n} extra 0D byte, typical of a text-mode transfer', 'repaired: the file had {n} extra 0D bytes, typical of a text-mode transfer'),
+    '{n} patch con la suma de control incorrecta ({names}): sus datos están dañados': ('{n} patch with a wrong checksum ({names}): its data is damaged', '{n} patches with a wrong checksum ({names}): their data is damaged'),
+    '{n} patch viene a cero en el archivo y queda vacío ({names})': ('{n} patch is all zeros in the file and is left empty ({names})', '{n} patches are all zeros in the file and are left empty ({names})'),
 }

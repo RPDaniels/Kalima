@@ -421,4 +421,13 @@ MESSAGES = {
     'Ningún Single ni Multi del banco usa el efecto {n}: asígnaselo a uno para oírlo': 'Aucun Single ni Multi de la banque n’utilise l’effet {n} : attribuez-le à l’un d’eux pour l’entendre',
     'Suena el {what} {pos} «{name}», que usa el efecto {n}': 'Lecture du {what} {pos} « {name} », qui utilise l’effet {n}',
     'con el efecto guardado en el K4; para oír tus cambios, escríbelo en el K4': 'avec l’effet enregistré dans le K4 ; pour entendre vos modifications, écrivez-le dans le K4',
+    'El archivo {name} tenía problemas:': 'Le fichier {name} présentait des problèmes :',
+    'Kalima lo ha corregido al abrirlo; el archivo original no se ha tocado. Usa «Guardar como» para tener una copia corregida.': 'Kalima l’a corrigé à l’ouverture ; le fichier d’origine n’a pas été modifié. Utilisez « Enregistrer sous » pour garder une copie corrigée.',
+    'al volcado le falta {n} byte': ('il manque {n} octet au dump', 'il manque {n} octets au dump'),
+    'efecto {n}': 'effet {n}',
+    'el archivo solo contiene peticiones de volcado al K4, no datos de sonidos': 'le fichier ne contient que des demandes de dump au K4, pas de données de sons',
+    'el volcado tiene {n} byte de más': ('le dump a {n} octet en trop', 'le dump a {n} octets en trop'),
+    'reparado: el archivo tenía {n} byte 0D de más, típico de una transferencia en modo texto': ('réparé : le fichier avait {n} octet 0D en trop, typique d’un transfert en mode texte', 'réparé : le fichier avait {n} octets 0D en trop, typique d’un transfert en mode texte'),
+    '{n} patch con la suma de control incorrecta ({names}): sus datos están dañados': ('{n} patch avec une somme de contrôle incorrecte ({names}) : ses données sont endommagées', '{n} patches avec une somme de contrôle incorrecte ({names}) : leurs données sont endommagées'),
+    '{n} patch viene a cero en el archivo y queda vacío ({names})': ('{n} patch est à zéro dans le fichier et reste vide ({names})', '{n} patches sont à zéro dans le fichier et restent vides ({names})'),
 }

@@ -146,7 +146,7 @@ def _covered(params, classes):
 
 
 def test_multi_effect_drum_fields_are_editable():
-    _covered(MULTI_PARAM_LIST, [("common", Multi, {"name", "sections"}), ("section", Section, ())])
+    _covered(MULTI_PARAM_LIST, [("common", Multi, {"name", "sections"}), ("section", Section, {"reserved"})])
     _covered(EFFECT_PARAM_LIST, [("common", Effect, {"reserved", "submixes"}), ("submix", SubmixSetting, ())])
     _covered(DRUM_PARAM_LIST, [("common", Drum, {"reserved", "notes"}), ("note", DrumNote, {"s1", "s2"}),
                                ("note_src", DrumSource, ())])

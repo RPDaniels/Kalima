@@ -10,7 +10,7 @@ reescriben esas referencias para que los Multis sigan sonando igual.
 """
 from __future__ import annotations
 
-from .i18n import _
+from .i18n import _, _n
 
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -18,7 +18,104 @@ from pathlib import Path
 
 from . import constants as C
 from .patches import ALL_DUMP_SIZE, Drum, Effect, Multi, Single
-from .sysex import Function, K4Error, Message, index_name, read_syx, write_patch_file
+from .sysex import Function, K4Error, Message, checksum, index_name, read_syx, write_patch_file
+
+
+# ------------------------------------------------------------------ comprobación de volcados
+
+def _layout(m: Message) -> list[tuple[str, int]] | None:
+    """Patches que contiene un volcado, en orden: (nombre, tamaño). None si no es un volcado."""
+    s1, s2 = (m.sub1 or 0) & 0x01, m.sub2 or 0
+    singles = [(f"Single {index_name(i)}", Single.DATA_SIZE) for i in range(64)]
+    multis = [(f"Multi {index_name(i)}", Multi.DATA_SIZE) for i in range(64)]
+    effects = [(_("efecto {n}", n=i + 1), Effect.DATA_SIZE) for i in range(32)]
+    if m.function == Function.ALL_DATA_DUMP:
+        return singles + multis + [("Drum", Drum.DATA_SIZE)] + effects
+    if m.function == Function.BLOCK_DATA_DUMP:
+        return effects if s1 else (multis if s2 == 0x40 else singles)
+    if m.function == Function.ONE_DATA_DUMP:
+        if s1:
+            return [("Drum", Drum.DATA_SIZE)] if s2 == 0x20 else [effects[s2 % 32]]
+        return [singles[s2]] if s2 < 64 else [multis[(s2 - 64) % 64]]
+    return None
+
+
+def _bad_checksums(m: Message, data: bytes) -> list[str]:
+    """Nombres de los patches cuya suma de control no cuadra (datos dañados)."""
+    bad, off = [], 0
+    for name, size in _layout(m) or []:
+        chunk = data[off:off + size]
+        off += size
+        if len(chunk) < size:
+            bad.append(name)
+        elif not any(chunk):
+            continue                       # a cero: posición vacía, no dañada (ver _empty)
+        elif name == "Drum":
+            # el Drum lleva una suma para la parte común y otra por cada nota
+            parts = [chunk[i:i + 11] for i in range(0, size, 11)]
+            if any(checksum(p[:10]) != p[10] for p in parts):
+                bad.append(name)
+        elif checksum(chunk[:-1]) != chunk[-1]:
+            bad.append(name)
+    return bad
+
+
+def _empty(m: Message, data: bytes) -> list[str]:
+    """Patches que vienen a cero: algunos programas guardan así lo que no tienen."""
+    out, off = [], 0
+    for name, size in _layout(m) or []:
+        chunk = data[off:off + size]
+        off += size
+        if len(chunk) == size and not any(chunk):
+            out.append(name)
+    return out
+
+
+def check_dump(m: Message) -> tuple[Message, list[str]]:
+    """Comprueba un volcado y, si se puede, lo repara. Devuelve el mensaje (el
+    original o el reparado) y los avisos para el usuario.
+
+    Reparación: los archivos pasados por un programa de transferencia en modo
+    texto (FTP, módems, BBS de los 90) tienen un byte 0D delante de cada 0A
+    (salto de línea de MS-DOS). Si quitándolos el volcado recupera su tamaño y
+    quedan menos patches con la suma de control mal que antes (normalmente
+    ninguno), se acepta la reparación. Los patches que vienen a cero se dejan
+    vacíos."""
+    layout = _layout(m)
+    if layout is None:
+        return m, []
+    size = sum(n for _name, n in layout)
+    data, notes = m.data, []
+    if len(data) != size and b"\r\n" in data:
+        fixed = data.replace(b"\r\n", b"\n")
+        if len(fixed) == size and len(_bad_checksums(m, fixed)) < len(_bad_checksums(m, data)):
+            notes.append(_n("reparado: el archivo tenía {n} byte 0D de más, típico de una transferencia en modo "
+                            "texto", "reparado: el archivo tenía {n} bytes 0D de más, típico de una transferencia "
+                            "en modo texto", len(data) - size))
+            m = Message(m.channel, m.function, bytes(m.body[:2]) + fixed)
+            data = fixed
+    if len(data) > size:
+        notes.append(_n("el volcado tiene {n} byte de más", "el volcado tiene {n} bytes de más", len(data) - size))
+    elif len(data) < size:
+        notes.append(_n("al volcado le falta {n} byte", "al volcado le faltan {n} bytes", size - len(data)))
+    empty = _empty(m, data)
+    if empty and len(empty) < len(layout):
+        notes.append(_n("{n} patch viene a cero en el archivo y queda vacío ({names})",
+                        "{n} patches vienen a cero en el archivo y quedan vacíos ({names})", len(empty),
+                        names=", ".join(empty[:4]) + (", …" if len(empty) > 4 else "")))
+    bad = _bad_checksums(m, data)
+    if bad:
+        names = ", ".join(bad[:4]) + (", …" if len(bad) > 4 else "")
+        notes.append(_n("{n} patch con la suma de control incorrecta ({names}): sus datos están dañados",
+                        "{n} patches con la suma de control incorrecta ({names}): sus datos están dañados",
+                        len(bad), names=names))
+    return m, notes
+
+
+def _slot(pos: str) -> int:
+    """'B-3' -> 18."""
+    group, num = pos.split("-")
+    return C.GROUPS.index(group) * 16 + int(num) - 1
 
 
 @dataclass
@@ -29,6 +126,8 @@ class Bank:
     effects: list[Effect | None] = field(default_factory=lambda: [None] * C.EFFECT_COUNT)
     external: bool = False          # de dónde vino (memoria interna o tarjeta)
     source: str = ""                # archivo de origen, si lo hay
+    warnings: list[str] = field(default_factory=list, repr=False, compare=False)   # avisos al cargar
+    repaired: bool = field(default=False, repr=False, compare=False)    # check_dump corrigió algún volcado
 
     # ------------------------------------------------------------ construcción
 
@@ -53,6 +152,10 @@ class Bank:
         found = False
         for m in messages:
             if m.function in (Function.ALL_DATA_DUMP, Function.BLOCK_DATA_DUMP, Function.ONE_DATA_DUMP):
+                checked, notes = check_dump(m)
+                bank.repaired |= checked is not m
+                bank.warnings += notes
+                m = checked
                 bank.external = m.external
                 bank._load_dump(m)
                 found = True
@@ -63,11 +166,36 @@ class Bank:
                     bank.singles[slot] = Single.from_bytes(m.data)
                     found = True
         if not found:
+            if any(m.function in (Function.ONE_DUMP_REQUEST, Function.BLOCK_DUMP_REQUEST, Function.ALL_DUMP_REQUEST)
+                   for m in messages):
+                raise K4Error(_("el archivo solo contiene peticiones de volcado al K4, no datos de sonidos"))
             raise K4Error(_("el archivo no contiene volcados de datos del K4"))
         return bank
 
     def _load_dump(self, m: Message) -> None:
         d = m.data
+        self._place(m, d)
+        # lo que viene a cero en el archivo no es un patch: posición vacía
+        off = 0
+        for name, size in _layout(m) or []:
+            chunk = d[off:off + size]
+            off += size
+            if len(chunk) == size and not any(chunk):
+                self._clear(name)
+
+    def _clear(self, name: str) -> None:
+        if name == "Drum":
+            self.drum = None
+            return
+        kind, _sep, pos = name.partition(" ")
+        if kind == "Single":
+            self.singles[_slot(pos)] = None
+        elif kind == "Multi":
+            self.multis[_slot(pos)] = None
+        else:                                   # "efecto N" (traducido): el número va al final
+            self.effects[int(name.split()[-1]) - 1] = None
+
+    def _place(self, m: Message, d: bytes) -> None:
         s1, s2 = m.sub1 & 0x01, m.sub2
         if m.function == Function.ALL_DATA_DUMP:
             if len(d) < ALL_DUMP_SIZE:

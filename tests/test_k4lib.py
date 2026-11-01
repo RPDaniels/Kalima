@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from k4lib import Bank, Effect, Location, Message, Single, read_syx
+from k4lib import Bank, Effect, K4Error, Location, Message, Single, read_syx
 from k4lib.params import encode
 from k4lib.patches import ALL_DUMP_SIZE, Drum, Multi
 from k4lib.sysex import (Function, all_dump_request, block_dump_request, checksum,
@@ -480,3 +480,72 @@ def test_fake_audition_drum(fake, bank):
     other.volume = (d.volume + 1) % 100
     assert fake.audition_drum(other, 0) is False               # el K4 tiene otro Drum
     assert fake.audition_drum(other, 0, compare=False) is None
+
+
+# ---------------------------------------------------------------- archivos dañados
+
+def _all_dump_bytes(bank) -> bytes:
+    return bank.to_all_dump().to_bytes()
+
+
+def test_text_mode_transfer_is_repaired(tmp_path, bank):
+    """Un banco pasado por FTP/BBS en modo texto: un 0D delante de cada 0A."""
+    raw = _all_dump_bytes(bank)
+    damaged = raw.replace(b"\n", b"\r\n")
+    assert len(damaged) > len(raw)
+    p = tmp_path / "texto.syx"
+    p.write_bytes(damaged)
+    b = Bank.from_file(p)
+    assert b.repaired and len(b.warnings) == 1 and "0D" in b.warnings[0]
+    assert _all_dump_bytes(b) == raw                      # idéntico al original
+
+
+def test_damaged_patch_is_reported(tmp_path, bank):
+    raw = bytearray(_all_dump_bytes(bank))
+    raw[8 + 131 * 5 + 20] ^= 0x01                        # un bit cambiado en el Single A-6
+    p = tmp_path / "danado.syx"
+    p.write_bytes(bytes(raw))
+    b = Bank.from_file(p)
+    assert not b.repaired
+    assert len(b.warnings) == 1 and "Single A-6" in b.warnings[0]
+
+
+def test_zeroed_patches_are_left_empty(tmp_path, bank):
+    """Algunos programas guardan a cero lo que no tienen (Multis, efectos, Drum)."""
+    raw = bytearray(_all_dump_bytes(bank))
+    start = 8 + 64 * 131
+    raw[start:-1] = bytes(len(raw) - 1 - start)
+    p = tmp_path / "solo-singles.syx"
+    p.write_bytes(bytes(raw))
+    b = Bank.from_file(p)
+    assert all(s is not None for s in b.singles)
+    assert all(m is None for m in b.multis) and b.drum is None and all(e is None for e in b.effects)
+    assert len(b.warnings) == 1 and "97" in b.warnings[0]
+
+
+def test_request_only_file_is_explained(tmp_path):
+    p = tmp_path / "peticion.syx"
+    p.write_bytes(all_dump_request(0).to_bytes())
+    with pytest.raises(K4Error, match="peticiones"):
+        Bank.from_file(p)
+
+
+def test_undocumented_bits_of_multi_sections_survive(bank):
+    """Algunos bancos de terceros usan bits que el manual no describe en las secciones."""
+    m = bank.multis[0]
+    raw = bytearray(m.to_bytes())
+    raw[12 + 4] |= 0x20                       # sección 1, byte 4, bit 5
+    raw[12 + 8] |= 0x40                       # sección 2, byte 0, bit 6
+    raw[-1] = checksum(bytes(raw[:-1]))
+    again = Multi.from_bytes(bytes(raw))
+    assert again.to_bytes() == bytes(raw)
+    assert again.sections[1].single == m.sections[1].single
+
+
+def test_name_keeps_the_arrow_character(bank):
+    s = Single.from_bytes(bank.singles[0].to_bytes())
+    raw = bytearray(s.to_bytes())
+    raw[9] = 0x7F
+    raw[-1] = checksum(bytes(raw[:-1]))
+    again = Single.from_bytes(bytes(raw))
+    assert again.name.endswith("←") and again.to_bytes() == bytes(raw)

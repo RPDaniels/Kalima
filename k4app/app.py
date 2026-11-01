@@ -487,7 +487,16 @@ class K4App(tk.Tk):
         if issues:
             msg += " · " + _n("{n} referencia a un patch que falta", "{n} referencias a patches que faltan",
                               len(issues))
-        self.status(msg, warn=bool(issues))
+        if bank.warnings:
+            msg += " · " + bank.warnings[0]
+        self.status(msg, warn=bool(issues or bank.warnings))
+        if bank.warnings:
+            text = _("El archivo {name} tenía problemas:", name=Path(path).name) + "\n\n" + \
+                "\n".join("•  " + w[0].upper() + w[1:] for w in bank.warnings)
+            if bank.repaired:
+                text += "\n\n" + _("Kalima lo ha corregido al abrirlo; el archivo original no se ha tocado. "
+                                     "Usa «Guardar como» para tener una copia corregida.")
+            messagebox.showwarning(APP_NAME, text, parent=self)
 
     def _set_bank(self, bank: Bank, path: Path | None, modified: bool):
         self.bank, self.path = bank, path

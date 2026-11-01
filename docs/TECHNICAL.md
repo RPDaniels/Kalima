@@ -5,7 +5,7 @@ formerly *K4 Librarian*) and **k4lib** (the library): code architecture, use as 
 library, and a detailed description of the patch system and the MIDI System Exclusive
 protocol of the **Kawai K4 / K4r** synthesizer (1989).
 
-> Document version: 0.5.1 · Python ≥ 3.10 (3.12 recommended on Windows)
+> Document version: 0.5.3 · Python ≥ 3.10 (3.12 recommended on Windows)
 
 ---
 
@@ -907,9 +907,15 @@ The K4 sends values in bits the manual does not document:
 
 - Bit 5 of byte 11 of the Singles is `0x20` in all 64 factory patches.
 - Bytes 4–9 of the effects and 3–9 of the Drum, described as padding, are not zero.
+- In Multi sections, bit 6 of byte 0 and bits 5–6 of byte 4 are 0 in the factory bank
+  but set in some third-party banks (bit 5 of byte 4 in every section of one of them).
+- Name character `0x7F`, used by some factory banks, is shown on HD44780-type displays
+  like the K4's as a left arrow; `k4lib` represents it as “←” and writes it back as `0x7F`.
 
-`k4lib` keeps them (`Single.s11_reserved`, `Effect.reserved`, `Drum.reserved`) so that
-reading and rewriting a bank does not alter it. `fingerprint()` and `canonical_bytes()`
+`k4lib` keeps them (`Single.s11_reserved`, `Effect.reserved`, `Drum.reserved`,
+`Section.reserved`) so that
+reading and rewriting a bank does not alter it: every complete bank in a collection of
+about 50 real banks comes back byte for byte. `fingerprint()` and `canonical_bytes()`
 ignore them when comparing patches. On reading, all other fields are masked to their
 documented bits.
 
@@ -944,6 +950,22 @@ values as All/Soft/Loud, which is wrong.
   three block dumps where only the last one is closed): `split_sysex` treats a new `F0`,
   or the end of the file, as the end of the previous message, and the checksum still
   validates the data.
+- **Checking and repairing dumps** (`bank.check_dump`, run by `Bank.from_messages`):
+  every dump is compared with its expected size and every patch's checksum is
+  verified; the problems end up in `Bank.warnings` and the application shows them when
+  opening the file.
+  - *Text-mode transfers.* Many 1990s files went through FTP, modems or BBSs in text
+    mode, which inserted a `0D` before every `0A` (an MS-DOS line break): the dump is
+    longer than it should be and everything after the first insertion is shifted. If
+    removing `0D` before `0A` restores the exact size and leaves fewer bad checksums
+    than before (normally none), the repaired dump is used and `Bank.repaired` is set.
+    The file itself is never modified; “Save as” writes a corrected copy.
+  - *Zeroed patches.* Some programs save what they do not have (Multis, effects, the
+    Drum) as zeros. A patch that is all zeros is left empty (`None`), not reported as
+    damaged.
+  - *Damaged patches* (bad checksum) are loaded anyway and listed in the warning.
+  - A file with only dump *requests* (`F0 40 0n 00/01/02 …`) is refused with a message
+    saying so.
 - **`.mid`**: a standard MIDI file (SMF type 0) with the SysEx messages as events. It is
   detected by the `MThd` header, not by the extension. When writing
   (`write_midi_file`), each event is separated from the next by the previous message's
@@ -961,7 +983,7 @@ values as All/Soft/Loud, which is wrong.
 ## 13. Tests
 
 ```bash
-pytest                      # 214 tests (many parametrized)
+pytest                      # 220 tests (many parametrized)
 ```
 
 They cover reading the factory bank, checksum validity, mute semantics, the
@@ -971,7 +993,8 @@ fingerprints, `.mid` files, the CLI, the simulator (reads, writes, card, protect
 checksum errors, bank write, edit buffer, audition of Singles, Multis and Drum keys), test-note planning, the velocity
 switch order, reception of SysEx chunked the way Windows delivers it (with interleaved
 noise) and its error messages, files whose dumps lack the final `F7`
-(`tests/ZAIDA3.SYX`) and block saving of partial banks, the editable parameter tables of the four patch types (every model field covered, minimum and maximum of
+(`tests/ZAIDA3.SYX`), block saving of partial banks, repair of text-mode transfers,
+damaged and zeroed patches, the editable parameter tables of the four patch types (every model field covered, minimum and maximum of
 each parameter surviving the SysEx round trip without touching other fields, ranges
 matching the Parameter Send table, display and parsing, undo/redo grouping), and the
 translation catalogs (§7).

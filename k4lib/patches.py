@@ -29,17 +29,28 @@ def _enc(v: int, off: int = 50) -> int:
     return (v + off) & 0x7F
 
 
+# El código 0x7F se ve en la pantalla del K4 como una flecha hacia la izquierda
+# (como en los displays HD44780); en Python se representa con «←».
+ARROW_LEFT = "\u2190"
+
+
 def _name_from(data: bytes) -> str:
     chars = []
     for b in data[:C.NAME_LENGTH]:
         b &= 0x7F
-        chars.append(chr(b) if 32 <= b < 127 else " ")
+        chars.append(ARROW_LEFT if b == 0x7F else chr(b) if b >= 32 else " ")
     return "".join(chars)
+
+
+def _name_char(c: str) -> int:
+    if c == ARROW_LEFT:
+        return 0x7F
+    return ord(c) if 32 <= ord(c) < 127 else 32
 
 
 def _name_to(name: str) -> bytes:
     name = (name + " " * C.NAME_LENGTH)[:C.NAME_LENGTH]
-    return bytes((ord(c) if 32 <= ord(c) < 127 else 32) for c in name)
+    return bytes(_name_char(c) for c in name)
 
 
 def _interleave(chunks: list[bytes]) -> bytes:
@@ -341,6 +352,9 @@ class Section:
     level: int = 100
     transpose: int = 0            # ±24
     tune: int = 0                 # ±50
+    # bits que el manual no documenta (0 en el banco de fábrica, 1 en algunos
+    # bancos de terceros): bit 6 del byte 0 y bits 5-6 del byte 4. Se conservan.
+    reserved: int = field(default=0, repr=False)
 
     @classmethod
     def from_bytes(cls, d: bytes) -> "Section":
@@ -349,13 +363,14 @@ class Section:
             channel=d[3] & 0x0F, vel_switch=(d[3] >> 4) & 0x03, muted=bool(d[3] & 0x40),
             submix=d[4] & 0x07, play_mode=(d[4] >> 3) & 0x03,
             level=d[5] & 0x7F, transpose=_bi(d[6], 24), tune=_bi(d[7]),
+            reserved=((d[0] >> 6) & 1) | ((d[4] >> 4) & 0x06),   # bit 0 = byte 0 bit 6; bits 1-2 = byte 4 bits 5-6
         )
 
     def to_bytes(self) -> bytes:
         return bytes([
-            self.single & 0x3F, self.low_key, self.high_key,
+            (self.single & 0x3F) | ((self.reserved & 1) << 6), self.low_key, self.high_key,
             (self.channel & 0x0F) | ((self.vel_switch & 3) << 4) | (0x40 if self.muted else 0),
-            (self.submix & 7) | ((self.play_mode & 3) << 3),
+            (self.submix & 7) | ((self.play_mode & 3) << 3) | ((self.reserved & 0x06) << 4),
             self.level, _enc(self.transpose, 24), _enc(self.tune),
         ])
 
